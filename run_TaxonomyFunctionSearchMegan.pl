@@ -16,19 +16,20 @@
 #along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 $USAGE = q/USAGE:
-perl run_mmseqs.pl    
+perl run_TaxonomyFunctionSearchMegan.pl    
                       --mapmethod <string>
                       Mapping method to be used; Choose one from
                       
                       mmseqs OR
                       diamond
 
-                      -db <\/path\/to\/MMseqsReferenceDB> 
+                      --db <\/path\/to\/MMseqsReferenceDB> 
                       Complete path to the sequence DB that will 
                       be used for the search (E.g an MMseqs OR Diamond DB made from
                       NCBI Refseqs Complete OR Uniref90 etc.)
-                      \#\#NOTE: The database supplied should be compatible with the 
+                      ## NOTE ##: The database supplied should be compatible with the 
                       mapping method chosen
+                      
                       -p, --parallel <Int number>
                       Number of parallel processes to run
                       
@@ -136,6 +137,8 @@ $pm->run_on_finish( sub {
     $querydb=$base_cmd."-".$sample_tag."queryDB";
     $result_db=$base_cmd."-".$sample_tag."resultDB";
     $m8_outfile=$base_cmd."-".$sample_tag."-s1.m8";
+    $daa_outfile=$base_cmd."-".$sample_tag.".daa";
+    
     $rma_outfile=$base_cmd."-".$sample_tag."-top25-tax-interpro.rma";
     $megantax_out=$base_cmd."-".$sample_tag."-Megan_Taxonomy-assignments.txt";
     $meganfunc_out=$base_cmd."-".$sample_tag."-Megan_Interpro-assignments.txt";
@@ -152,8 +155,8 @@ $pm->run_on_finish( sub {
         }
         elsif ($mapmethod eq "diamond")
         {
-        diamond blastx --query 00fastq/reads.fastq.gz --db nr --daa 10daa/reads.daa
-
+        print OUT "diamond blastx --query $file --db $db --daa $outpath/$daa_outfile\n";
+        
 
         }
         else
@@ -161,12 +164,18 @@ $pm->run_on_finish( sub {
         die "Mapping method -> $mapmethod <- not recognised"; 
         }
         
-        if ($meganpath)
+        if ($meganpath && $mapmethod eq "mmseqs")
         {
         print OUT "\#MEGAN will be run!\n";
         print OUT "$meganpath/tools/blast2rma -i $outpath/$m8_outfile -f BlastTab -a2t $meganpath/prot_acc2tax-Nov2018X1.abin -a2interpro2go $meganpath/acc2interpro-June2018X.abin -o $outpath/$rma_outfile\n";
         print OUT "$meganpath/tools/rma2info -i $outpath/$rma_outfile --names -r G -v -r2c Taxonomy > $outpath/$megantax_out\n";
         print OUT "$meganpath/tools/rma2info -i $outpath/$rma_outfile --names -r G -v -r2c INTERPRO2GO > $outpath/$meganfunc_out\n";
+        }
+        elsif ($meganpath && $mapmethod eq "diamond")
+        {
+        print OUT "$meganpath/tools/daa-meganizer -i $outpath/$daa_outfile -a2t $meganpath/prot_acc2tax-Nov2018X1.abin -a2interpro2go $meganpath/acc2interpro-June2018X.abin\n";
+        print OUT "$meganpath/tools/daa2info -i $outpath/$daa_outfile -o $outpath/$megantax_out --names -r G -v -r2c Taxonomy\n";
+        print OUT "$meganpath/tools/daa2info -i $outpath/$daa_outfile -o $outpath/$meganfunc_out --names -r G -v -r2c INTERPRO2GO\n"
         }
         else
         {
@@ -185,16 +194,6 @@ $pm->run_on_finish( sub {
 
 #     print "\n\n ----> $pid <---- @pids\n\n";
 
-    # system("mmseqs createdb $file $outpath/$querydb");
-    # system("mmseqs search $outpath/$querydb $db $outpath/$result_db tmp --db-load-mode 2 --threads 1 --max-seqs 25 -s 1 -a -e 1e-5");
-    # system("mmseqs convertalis $outpath/$querydb $db $outpath/$result_db $outpath/$m8_outfile");
-    # 
-    #     if($meganpath)
-    # 	{
-    # 	system ("$meganpath/tools/blast2rma -i $outpath/$m8_outfile -f BlastTab -a2t $meganpath/prot_acc2tax-Nov2018X1.abin -a2interpro2go $meganpath/acc2interpro-June2018X.abin -o $outpath/$rma_outfile");
-    # 	system ("$meganpath/tools/rma2info -i $outpath/$rma_outfile --names -r G -v -r2c Taxonomy > $outpath/$megantax_out");
-    # 	system ("$meganpath/tools/rma2info -i $outpath/$rma_outfile --names -r G -v -r2c INTERPRO2GO > $outpath/$meganfunc_out");
-    # 	}
     
     $pm->finish(0, { result => \@pids, input => $file });; # do the exit in the child process
     }
