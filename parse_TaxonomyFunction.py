@@ -4,7 +4,7 @@ import csv
 from collections import defaultdict
 import _pickle as cPickle
 import bz2
-
+from sklearn.feature_extraction import DictVectorizer
 
 import argparse, sys, textwrap
 
@@ -98,9 +98,6 @@ def main():
                 funcfile = line[3]
                 funcfiletype = line[4]
                 m8file = line[5]
-
-               # if (GEdict):
-                #    GE = GEdict.get(sampletag)
                 
                 print ("Current sample:", taxafile,taxafiletype,funcfile,funcfiletype,m8file)
                 (taxadict,funcdict,genedict ) = coreRun(taxafile,taxafiletype,funcfile,funcfiletype,m8file)
@@ -121,50 +118,25 @@ def main():
                 #first10pairs = {k: funchash[k] for k in list(funchash)[100:120]}
                 #print("resultant dictionary : \n", first10pairs)
                 print("Total unique functions: ", len(funchash))
-
-                #FuncAvgGeneLengthdict = defaultdict(list)
+                
+                rpkgdictlist = []
 
                 if (GEdict):
                     ge = GEdict.get(sampletag)
+                    FuncRpkgDict = normalize_rpkg(funchash,genedict,genelendict,ge)
+                    rpkgdictlist.append(FuncRpkgDict)
+                            
                 else:
                     print ("MicrobeCensus reult not found; Will not normalize")
                 
-                for func,readarray in funchash.items():
-                    FuncLengthArray = []
-                    for read in readarray:
-                        genes = genedict[read]
-                        gene_lengths = list(map(lambda x: genelendict.get(x), genes))
-                        list(np.float_(gene_lengths))
-                        read_avg_gene_length = Average(gene_lengths)
-                        #print (read,avg_gene_length)
-                        #FuncAvgGeneLengthdict[read].append(avg_gene_length)
-                        FuncLengthArray.append(read_avg_gene_length)
-
-                    FuncAvgGeneLength = Average(FuncLengthArray)
-                    #FuncAvgGeneLengthdict[func].append(FuncAvgGeneLength)
-
-                    numreads = len(readarray)
-                    if (ge):
-                        lengthkb = FuncAvgGeneLength/1000
-                        rpkg = numreads/lengthkb/ge
-
-                    print ("Function: " + str(func) + " RPKG: " + str(rpkg))    
-                #first10pairs = {k: FuncAvgGeneLengthdict[k] for k in list(FuncAvgGeneLengthdict)[100:120]}
-                #print("resultant dictionary : \n", first10pairs)
-
-                #print ()
+    # Create DictVectorizer object
+    dictvectorizer = DictVectorizer(sparse=False)
+    
+    # Convert dictionary into feature matrix
+    features = dictvectorizer.fit_transform(rpkgdictlist)
+    print (features)
+    
                 
-                #if (GE):
-                            
-                #for func,readarray in funchash.items():
-                   # for read in readarra
-                
-                            
-                            
-			
-                #funccount = mutate_dict(lambda x: len(x), funchash)
-                
-                #if(unstrat):
                     
                     
                 
@@ -176,8 +148,35 @@ def main():
 #def stratified():
     
 
-#def normalize_rpkg(dict_reads_mapped_to_func):
+def normalize_rpkg(dict_reads_mapped_to_func,dict_genes_mapped_to_read,refseq_gene_len_dict,GE):
     
+    FuncRPKGdict = defaultdict(list)
+    
+    for func,readarray in dict_reads_mapped_to_func.items():
+                    FuncLengthArray = []
+                    for read in readarray:
+                        genes = dict_genes_mapped_to_read[read]
+                        gene_lengths = list(map(lambda x: refseq_gene_len_dict.get(x), genes))
+                        list(np.float_(gene_lengths))
+                        read_avg_gene_length = Average(gene_lengths)
+                        #print (read,avg_gene_length)
+                        #FuncAvgGeneLengthdict[read].append(avg_gene_length)
+                        FuncLengthArray.append(read_avg_gene_length)
+
+                    FuncAvgGeneLength = Average(FuncLengthArray)
+
+                    numreads = len(readarray)
+                    
+                    if (ge):
+                        lengthkb = FuncAvgGeneLength/1000
+                        rpkg = numreads/lengthkb/ge
+                    else:
+                        rpkg = float('NaN')
+
+                    FuncRPKGdict[func].append(rpkg)
+                    print ("Function: " + str(func) + " RPKG: " + str(rpkg))
+    
+    return FuncRPKGdict
 
 def parseMicrobeCensusReport(MCRfile):
     d = {}
