@@ -53,6 +53,7 @@ def main():
     else:
         print ("MicrobeCensus report not provided; RPKG will not be calculated")
     
+    
     if not multi:
         taxadict = {}
         funcdict = {}
@@ -81,7 +82,7 @@ def main():
             funchash[value[1]].append(key)
     
     
-        funccount = mutate_dict(lambda x: len(x), funchash)
+        #funccount = mutate_dict(lambda x: len(x), funchash)
         
     else:
         print ("Running multiple samples from file:", multi)
@@ -111,7 +112,11 @@ def main():
                 filteredDict = dict(filter(lambda x: len(x[1]) == 2, combinedDict.items()))
                 
                 print ("Reads mapped to both taxa AND functions: " + str(len(filteredDict)))
- 
+                
+                first10pairs = {k: filteredDict[k] for k in list(filteredDict)[100:120]}
+                print("resultant dictionary : \n", first10pairs)
+
+                
                 funchash = defaultdict(list)
                 for key, value in sorted(filteredDict.items()):
                     funchash[value[1]].append(key)
@@ -121,7 +126,7 @@ def main():
                 #print("resultant dictionary : \n", first10pairs)
                 print("Total unique functions: ", len(funchash))
                 
-                rpkgdictlist = []
+                #rpkgdictlist = []
                 
                 if (GEdict):
                     ge = GEdict.get(sampletag)
@@ -129,30 +134,23 @@ def main():
                     #SampleFuncRpkgdict = {}
                     SampleFuncRpkgdict[sampletag]=FuncRpkgDict
                     #rpkgdictlist.append(SampleFuncRpkgdict)
-                    #first10pairs = {k: FuncRpkgDict[k] for k in list(FuncRpkgDict)[100:120]}
-                    #print("resultant dictionary : \n", first10pairs)
                             
                 else:
-                    print ("MicrobeCensus reult not found; Will not normalize")
+                    print ("MicrobeCensus result not found; Will not normalize")
 
 
-    first10pairs = {k: SampleFuncRpkgdict[k] for k in list(SampleFuncRpkgdict)[1:3]}
-    print("resultant dictionary : \n", first10pairs)
+    #first10pairs = {k: SampleFuncRpkgdict[k] for k in list(SampleFuncRpkgdict)[1:3]}
+    #print("resultant dictionary : \n", first10pairs)
 
     #pdDF = pd.Dataframe()
-
-    pdDF = pd.DataFrame.from_dict(SampleFuncRpkgdict, orient='index')
-    pdDFT = pdDF.T
+        
+    if (unstrat):
+        pdDF = pd.DataFrame.from_dict(SampleFuncRpkgdict, orient='index')
+        pdDFT = pdDF.T
     
-    pd.DataFrame.to_csv(pdDFT, path_or_buf='test.out', sep='\t', na_rep='', header=True, index=True, mode='w', line_terminator='\n', escapechar=None, decimal='.')
-    # Create DictVectorizer object
-    #dictvectorizer = DictVectorizer(sparse=False)
-    
-    # Convert dictionary into feature matrix
-    #features = dictvectorizer.fit_transform(rpkgdictlist)
-    #print (dictvectorizer.get_feature_names())
-    #print (features)
-    #np.savetxt("test.out", features, fmt='%.18e', delimiter='\t', newline='\n', encoding=None)
+        pd.DataFrame.to_csv(pdDFT, path_or_buf='test.out', sep='\t', na_rep='', header=True, index=True, mode='w', line_terminator='\n', escapechar=None, decimal='.')
+    elif (strat):
+        
                 
                     
                     
