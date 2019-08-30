@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 #import xarray as xr
 import csv
 from collections import defaultdict
@@ -87,6 +88,7 @@ def main():
         
         with open(multi, newline = '') as multif:                                                                                          
             multi_reader = csv.reader(multif, delimiter='\t')
+            SampleFuncRpkgdict = {}
             for line in multi_reader:
                 print ("line:",line)
                     
@@ -120,22 +122,37 @@ def main():
                 print("Total unique functions: ", len(funchash))
                 
                 rpkgdictlist = []
-
+                
                 if (GEdict):
                     ge = GEdict.get(sampletag)
                     FuncRpkgDict = normalize_rpkg(funchash,genedict,genelendict,ge)
-                    rpkgdictlist.append(FuncRpkgDict)
+                    #SampleFuncRpkgdict = {}
+                    SampleFuncRpkgdict[sampletag]=FuncRpkgDict
+                    #rpkgdictlist.append(SampleFuncRpkgdict)
+                    #first10pairs = {k: FuncRpkgDict[k] for k in list(FuncRpkgDict)[100:120]}
+                    #print("resultant dictionary : \n", first10pairs)
                             
                 else:
                     print ("MicrobeCensus reult not found; Will not normalize")
-                
+
+
+    first10pairs = {k: SampleFuncRpkgdict[k] for k in list(SampleFuncRpkgdict)[1:3]}
+    print("resultant dictionary : \n", first10pairs)
+
+    #pdDF = pd.Dataframe()
+
+    pdDF = pd.DataFrame.from_dict(SampleFuncRpkgdict, orient='index')
+    pdDFT = pdDF.T
+    
+    pd.DataFrame.to_csv(pdDFT, path_or_buf='test.out', sep='\t', na_rep='', header=True, index=True, mode='w', line_terminator='\n', escapechar=None, decimal='.')
     # Create DictVectorizer object
-    dictvectorizer = DictVectorizer(sparse=False)
+    #dictvectorizer = DictVectorizer(sparse=False)
     
     # Convert dictionary into feature matrix
-    features = dictvectorizer.fit_transform(rpkgdictlist)
-    print (features)
-    
+    #features = dictvectorizer.fit_transform(rpkgdictlist)
+    #print (dictvectorizer.get_feature_names())
+    #print (features)
+    #np.savetxt("test.out", features, fmt='%.18e', delimiter='\t', newline='\n', encoding=None)
                 
                     
                     
@@ -167,14 +184,14 @@ def normalize_rpkg(dict_reads_mapped_to_func,dict_genes_mapped_to_read,refseq_ge
 
                     numreads = len(readarray)
                     
-                    if (ge):
+                    if (GE):
                         lengthkb = FuncAvgGeneLength/1000
-                        rpkg = numreads/lengthkb/ge
+                        rpkg = numreads/lengthkb/GE
                     else:
                         rpkg = float('NaN')
 
-                    FuncRPKGdict[func].append(rpkg)
-                    print ("Function: " + str(func) + " RPKG: " + str(rpkg))
+                    FuncRPKGdict[func]=float(rpkg)
+                    #print ("Function: " + str(func) + " RPKG: " + str(rpkg))
     
     return FuncRPKGdict
 
