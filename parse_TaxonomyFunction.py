@@ -143,13 +143,14 @@ def main():
     #print("resultant dictionary : \n", first10pairs)
 
     #pdDF = pd.Dataframe()
-        
-    if (unstrat):
+            
+
+    if (unstrat == "Y"):
         pdDF = pd.DataFrame.from_dict(SampleFuncRpkgdict, orient='index')
         pdDFT = pdDF.T
     
         pd.DataFrame.to_csv(pdDFT, path_or_buf='test.out', sep='\t', na_rep='', header=True, index=True, mode='w', line_terminator='\n', escapechar=None, decimal='.')
-    elif (strat):
+    #elif (strat):
         
                 
                     
@@ -164,7 +165,6 @@ def main():
     
 
 def normalize_rpkg(dict_reads_mapped_to_func,dict_genes_mapped_to_read,refseq_gene_len_dict,GE):
-    
     FuncRPKGdict = defaultdict(list)
     
     for func,readarray in dict_reads_mapped_to_func.items():
@@ -181,9 +181,10 @@ def normalize_rpkg(dict_reads_mapped_to_func,dict_genes_mapped_to_read,refseq_ge
                     FuncAvgGeneLength = Average(FuncLengthArray)
 
                     numreads = len(readarray)
+                    lengthkb = FuncAvgGeneLength/1000
                     
-                    if (GE):
-                        lengthkb = FuncAvgGeneLength/1000
+                    if (GE and lengthkb):
+                        #lengthkb = FuncAvgGeneLength/1000
                         rpkg = numreads/lengthkb/GE
                     else:
                         rpkg = float('NaN')
