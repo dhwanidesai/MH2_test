@@ -5,7 +5,7 @@ import csv
 from collections import defaultdict
 import _pickle as cPickle
 import bz2
-from sklearn.feature_extraction import DictVectorizer
+#from sklearn.feature_extraction import DictVectorizer
 
 import argparse, sys, textwrap
 
@@ -113,28 +113,33 @@ def main():
                 
                 print ("Reads mapped to both taxa AND functions: " + str(len(filteredDict)))
                 
-                first10pairs = {k: filteredDict[k] for k in list(filteredDict)[100:120]}
-                print("resultant dictionary : \n", first10pairs)
+                #first10pairs = {k: filteredDict[k] for k in list(filteredDict)[100:120]}
+                #print("resultant dictionary : \n", first10pairs)
 
                 
                 funchash = defaultdict(list)
                 for key, value in sorted(filteredDict.items()):
                     funchash[value[1]].append(key)
             
-            
-                #first10pairs = {k: funchash[k] for k in list(funchash)[100:120]}
+                
+                
+                first10pairs = {k: funchash[k] for k in list(funchash)[100:120]}
                 #print("resultant dictionary : \n", first10pairs)
-                print("Total unique functions: ", len(funchash))
+                #print("Total unique functions: ", len(funchash))
                 
                 #rpkgdictlist = []
                 
-                if (GEdict):
+                if (GEdict and unstrat == "Y"):
                     ge = GEdict.get(sampletag)
                     FuncRpkgDict = normalize_rpkg(funchash,genedict,genelendict,ge)
                     #SampleFuncRpkgdict = {}
-                    SampleFuncRpkgdict[sampletag]=FuncRpkgDict
+                    SampleFuncRpkgdict[sampletag] = FuncRpkgDict
                     #rpkgdictlist.append(SampleFuncRpkgdict)
-                            
+                elif (GEdict and strat == "Y"):
+                      ge = GEdict.get(sampletag)
+                      functaxahash = stratified(funchash,filteredDict)
+                      FuncRpkgDict = normalize_rpkg(functaxahash,genedict,genelendict,ge)
+                      SampleFuncRpkgdict[sampletag] = FuncRpkgDict
                 else:
                     print ("MicrobeCensus result not found; Will not normalize")
 
@@ -145,11 +150,11 @@ def main():
     #pdDF = pd.Dataframe()
             
 
-    if (unstrat == "Y"):
-        pdDF = pd.DataFrame.from_dict(SampleFuncRpkgdict, orient='index')
-        pdDFT = pdDF.T
+    #if (unstrat == "Y"):
+    pdDF = pd.DataFrame.from_dict(SampleFuncRpkgdict, orient='index')
+    pdDFT = pdDF.T
     
-        pd.DataFrame.to_csv(pdDFT, path_or_buf='test.out', sep='\t', na_rep='', header=True, index=True, mode='w', line_terminator='\n', escapechar=None, decimal='.')
+    pd.DataFrame.to_csv(pdDFT, path_or_buf='test.out', sep='\t', na_rep='', header=True, index=True, mode='w', line_terminator='\n', escapechar=None, decimal='.')
     #elif (strat):
         
                 
@@ -161,7 +166,24 @@ def main():
 #def unstratified():
     
     
-#def stratified():
+def stratified(FuncReadHash,filtFuncTaxadict):
+    
+    taxahash = defaultdict(list)
+    for key, value in sorted(filtFuncTaxadict.items()):
+        taxahash[key] = value[0]
+    
+    stratified_hash = defaultdict(list)
+    for func,readarray in FuncReadHash.items():
+        for read in readarray:
+            taxon = taxahash[read]
+            functaxakey = str(func) + "|" + str(taxon)
+            
+            stratified_hash[functaxakey].append(read)
+            
+            
+    
+    return stratified_hash
+    
     
 
 def normalize_rpkg(dict_reads_mapped_to_func,dict_genes_mapped_to_read,refseq_gene_len_dict,GE):
