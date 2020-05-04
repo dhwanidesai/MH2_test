@@ -1,20 +1,26 @@
 import numpy as np
 import pandas as pd
-#import xarray as xr
 import csv
 from collections import defaultdict
-import _pickle as cPickle
+#import _pickle as cPickle
+#import pickle  as cPickle
+
+try:
+    import _pickle as cPickle
+except ImportError:
+    import pickle
+    
 import bz2
-#from sklearn.feature_extraction import DictVectorizer
+from operator import itemgetter
 
 import argparse, sys, textwrap
 
 parser=argparse.ArgumentParser()
 
 parser.add_argument('--taxafile', help = 'File mapping the reads to Taxa')
-parser.add_argument('--taxafiletype', help = 'Source program for Taxa identification, e.g Kraken2, MEGAN, mmseqs2')
+parser.add_argument('--taxafiletype', help = 'Source program for Taxa identification, either one of kraken2 or megan')
 parser.add_argument('--funcfile', help = 'File mapping reads to functional categories')
-parser.add_argument('--funcfiletype', help = 'Source program for Function identification, e.g mmseqs, diamond, MEGAN')
+parser.add_argument('--funcfiletype', help = 'Source program for Function identification, either one of uniref, megan or COG')
 parser.add_argument('--m8file', help = 'BLAST or BLAST-like tab delimited output file mapping reads to Refseq or uniref IDs; required for Normalization to RPKG')
 
 parser.add_argument('--multisample', help = textwrap.dedent('''For running multiple samples at a time, input a text file; overrides the above 5 arguments
@@ -30,8 +36,13 @@ Here --SampleDir is the directory containing the cleaned, stitched reads for the
 
 If this argument is not supplied, the Normalization to RPKG will not be attempted
 '''))
-parser.add_argument('--unstratified', help='Output unstratified metabolic functions; must choose at most one of --stratified or --unstratified')
-parser.add_argument('--stratified', help='Output metabolic functions stratified by taxa; must choose at most one of --stratified or --unstratified')
+
+parser.add_argument('--outputf', help = 'File name for writing the output')
+
+parser.add_argument('--unstratified', help = 'Boolean Y|N to output unstratified metabolic functions; must choose at most one of --stratified or --unstratified')
+parser.add_argument('--stratified', help = 'Boolean Y|N to output metabolic functions stratified by taxa; must choose at most one of --stratified or --unstratified')
+parser.add_argument('--map2EC', help = 'Boolean Y|N to output a matrix of EC numbers in samples')
+
 
 
 def main():
@@ -40,18 +51,42 @@ def main():
     multi = args.multisample
     strat = args.stratified
     unstrat = args.unstratified
-    
-    genlenf = bz2.BZ2File('RefGeneLength.pbz2', 'rb')
-    genelendict = cPickle.load(genlenf)
+    outfile = args.outputf
 
+    map2ECflag = args.map2EC
+    
+    RSgenlenf = bz2.BZ2File('RefGeneLength.pbz2', 'rb')
+    RSgenelendict = cPickle.load(RSgenlenf)
+
+    UPgenlenf = bz2.BZ2File('UnirefGeneLength.pbz2', 'rb')
+    UPgenelendict = cPickle.load(UPgenlenf)
+    
+    COGgenlenf = bz2.BZ2File('COGDBGeneLength.pbz2', 'rb')
+    COGgenelendict = cPickle.load(COGgenlenf)
+    
+    if (map2ECflag == "Y"):
+        RS2ECmapf = bz2.BZ2File('RsECmapped.pbz2', 'rb')
+        RS2ECdict = cPickle.load(RS2ECmapf)
+        
+        UP2ECmapf = bz2.BZ2File('UpECmapped.pbz2', 'rb')
+        UP2ECdict = cPickle.load(UP2ECmapf)
+        
+        COG2ECmapf = bz2.BZ2File('COGECmapped.pbz2', 'rb')
+        COG2ECdict = cPickle.load(COG2ECmapf)
+    else:
+        map2ECflag = "N"
+        
+    
     MCreport = args.MicrobeCensusReport
     GEdict = {}
 
     if (MCreport):
         GEdict = parseMicrobeCensusReport(MCreport)
+        GEdictflag = "Y"
         print (GEdict)
     else:
-        print ("MicrobeCensus report not provided; RPKG will not be calculated")
+        print ("MicrobeCensus report not provided; RPKG will not be calculated; will normalize to RPKM")
+        GEdictflag = "N"
     
     
     if not multi:
@@ -80,10 +115,7 @@ def main():
         funchash = defaultdict(list)
         for key, value in sorted(filteredDict.items()):
             funchash[value[1]].append(key)
-    
-    
-        #funccount = mutate_dict(lambda x: len(x), funchash)
-        
+                
     else:
         print ("Running multiple samples from file:", multi)
         
@@ -95,6 +127,8 @@ def main():
                     
                 taxadict = {}
                 funcdict = {}
+                tot_reads_mapped,taxa_AND_func_mapped,taxa_mapped,taxa_OR_func_mapped,func_mapped,EC_mapped = 0,0,0,0,0,0
+                perc_EC_mapped,perc_func_mapped,perc_taxa_AND_func_mapped,perc_taxa_mapped,perc_taxa_OR_func_mapped = 0,0,0,0,0
                 sampletag = line[0]
                 taxafile = line[1]
                 taxafiletype = line[2]
@@ -102,71 +136,215 @@ def main():
                 funcfiletype = line[4]
                 m8file = line[5]
                 
+                if (funcfiletype == 'megan' and map2ECflag == "Y"):
+                    #genlenf = bz2.BZ2File('RefGeneLength.pbz2', 'rb')
+                    #genelendict = cPickle.load(genlenf)
+                    genelendict = RSgenelendict
+                    #RS2ECmapf = bz2.BZ2File('RsECmapped.pbz2', 'rb')
+                    #Seq2ECdict = cPickle.load(RS2ECmapf)
+                    Seq2ECdict = RS2ECdict
+                elif (funcfiletype == 'megan' and map2ECflag == "N"):
+                    #genlenf = bz2.BZ2File('RefGeneLength.pbz2', 'rb')
+                    #genelendict = cPickle.load(genlenf)
+                    genelendict = RSgenelendict
+                elif (funcfiletype == 'uniref' and map2ECflag == "Y"):
+                    #genlenf = bz2.BZ2File('UnirefGeneLength.pbz2', 'rb')
+                    #genelendict = cPickle.load(genlenf)
+                    genelendict = UPgenelendict
+                    #RS2ECmapf = bz2.BZ2File('UpECmapped.pbz2', 'rb')
+                    #RS2ECdict = cPickle.load(RS2ECmapf)
+                    Seq2ECdict = UP2ECdict
+                elif (funcfiletype == 'uniref' and map2ECflag == "N"):
+                    #genlenf = bz2.BZ2File('UnirefGeneLength.pbz2', 'rb')
+                    #genelendict = cPickle.load(genlenf)
+                    genelendict = UPgenelendict
+                elif (funcfiletype == 'COG' and map2ECflag == "Y"):
+                    genelendict = COGgenelendict
+                    Seq2ECdict = COG2ECdict
+                elif (funcfiletype == 'COG' and map2ECflag == "N"):
+                    genelendict = COGgenelendict
+                    
+                
                 print ("Current sample:", taxafile,taxafiletype,funcfile,funcfiletype,m8file)
-                (taxadict,funcdict,genedict ) = coreRun(taxafile,taxafiletype,funcfile,funcfiletype,m8file)
-                print ("Total reads mapped to taxa: " + str(len(taxadict)))
-                print ("Total reads mapped to functions: " + str(len(funcdict)))
+                (taxadict,funcdict,genedict) = coreRun(taxafile,taxafiletype,funcfile,funcfiletype,m8file)
+                
+                tot_reads_mapped = len(genedict)
+                
+                print ("Total reads mapped: " + str(tot_reads_mapped))
+                
+                taxa_mapped = len(taxadict)
+                func_mapped = len(funcdict)
+                perc_taxa_mapped = (taxa_mapped/tot_reads_mapped)*100
+                perc_func_mapped = (func_mapped/tot_reads_mapped)*100
+                
+                print ("Total reads mapped to taxa: " + str(len(taxadict)) + " percent " + str(perc_taxa_mapped))
+                print ("Total reads mapped to functions: " + str(len(funcdict)) + " percent " + str(perc_func_mapped))
         
                 combinedDict = mergeTaxaFunc(taxadict,funcdict)
-                print ("Reads mapped to either taxa OR functions: " + str(len(combinedDict)))
+                taxa_OR_func_mapped = len(combinedDict)
+                perc_taxa_OR_func_mapped = (taxa_OR_func_mapped/tot_reads_mapped)*100
+                
+                print ("Reads mapped to either taxa OR functions: " + str(len(combinedDict)) + " percent " + str(perc_taxa_OR_func_mapped))
+                
                 filteredDict = dict(filter(lambda x: len(x[1]) == 2, combinedDict.items()))
+                taxa_AND_func_mapped = len(filteredDict)
+                perc_taxa_AND_func_mapped = (taxa_AND_func_mapped/tot_reads_mapped)*100
+
+                print ("Reads mapped to both taxa AND functions: " + str(len(filteredDict)) + " percent " + str(perc_taxa_AND_func_mapped))
                 
-                print ("Reads mapped to both taxa AND functions: " + str(len(filteredDict)))
-                
-                #first10pairs = {k: filteredDict[k] for k in list(filteredDict)[100:120]}
-                #print("resultant dictionary : \n", first10pairs)
+                first10pairs = {k: filteredDict[k] for k in list(filteredDict)[100:120]}
+                print("resultant dictionary taxa and func: \n", first10pairs)
 
                 
                 funchash = defaultdict(list)
                 for key, value in sorted(filteredDict.items()):
-                    funchash[value[1]].append(key)
-            
-                
-                
-                first10pairs = {k: funchash[k] for k in list(funchash)[100:120]}
+                    key = str(key).rstrip('\n')
+                    val = str(value[1]).rstrip('\n')
+                    funchash[val].append(key)
+                            
+                #first10pairs = {k: funchash[k] for k in list(funchash)[100:120]}
                 #print("resultant dictionary : \n", first10pairs)
-                #print("Total unique functions: ", len(funchash))
-                
-                #rpkgdictlist = []
-                
-                if (GEdict and unstrat == "Y"):
+            
+                print("Total unique functions: ", len(funchash))
+                                
+                if (GEdictflag == "Y" and unstrat == "Y" and map2ECflag == "N"):
                     ge = GEdict.get(sampletag)
                     FuncRpkgDict = normalize_rpkg(funchash,genedict,genelendict,ge)
-                    #SampleFuncRpkgdict = {}
                     SampleFuncRpkgdict[sampletag] = FuncRpkgDict
-                    #rpkgdictlist.append(SampleFuncRpkgdict)
-                elif (GEdict and strat == "Y"):
+                elif (GEdictflag == "Y" and strat == "Y" and map2ECflag == "N"):
                       ge = GEdict.get(sampletag)
                       functaxahash = stratified(funchash,filteredDict)
                       FuncRpkgDict = normalize_rpkg(functaxahash,genedict,genelendict,ge)
                       SampleFuncRpkgdict[sampletag] = FuncRpkgDict
-                else:
-                    print ("MicrobeCensus result not found; Will not normalize")
+                elif (GEdictflag == "Y" and unstrat == "Y" and map2ECflag == "Y"):
+                    ge = GEdict.get(sampletag)
+                    EChash = mapRS2EC(funchash,Seq2ECdict,genedict)
+                    
+                    EC_mapped = len(EChash)
+                    perc_EC_mapped = (EC_mapped/tot_reads_mapped)*100
+                    
+                    print ("Total ECs detected: ",str(len(EChash)) + " percent " + str(perc_EC_mapped))
+                    #first10pairs = {k: EChash[k] for k in list(EChash)[10:20]}
+                    #print("resultant dictionary EC read hash: \n", first10pairs)
+                    FuncRpkgDict = normalize_rpkg(EChash,genedict,genelendict,ge)
+                    SampleFuncRpkgdict[sampletag] = FuncRpkgDict
+                elif (GEdictflag == "Y" and strat == "Y" and map2ECflag == "Y"):
+                    ge = GEdict.get(sampletag)
+                    EChash = mapRS2EC(funchash,Seq2ECdict,genedict)
+                    
+                    EC_mapped = len(EChash)
+                    perc_EC_mapped = (EC_mapped/tot_reads_mapped)*100
+                    
+                    print ("Total ECs detected: ",str(len(EChash)) + " percent " + str(perc_EC_mapped))
+                    
+                    ECtaxahash = stratified(EChash,filteredDict)
+                    FuncRpkgDict = normalize_rpkg(ECtaxahash,genedict,genelendict,ge)
+                    SampleFuncRpkgdict[sampletag] = FuncRpkgDict
+                elif (GEdictflag == "N" and unstrat == "Y" and map2ECflag == "N"):
+                    ge = len(filteredDict)
+                    ge = ge/1000000
+                    FuncRpkgDict = normalize_rpkg(funchash,genedict,genelendict,ge)
+                    SampleFuncRpkgdict[sampletag] = FuncRpkgDict
+                elif (GEdictflag == "N" and strat == "Y" and map2ECflag == "N"):
+                    ge = len(filteredDict)
+                    ge = ge/1000000
+                    functaxahash = stratified(funchash,filteredDict)
+                    FuncRpkgDict = normalize_rpkg(functaxahash,genedict,genelendict,ge)
+                    SampleFuncRpkgdict[sampletag] = FuncRpkgDict
+                elif (GEdictflag == "N" and unstrat == "Y" and map2ECflag == "Y"):
+                    ge = len(filteredDict)
+                    ge = ge/1000000
+                    EChash = mapRS2EC(funchash,Seq2ECdict,genedict)
+                    
+                    EC_mapped = len(EChash)
+                    perc_EC_mapped = (EC_mapped/tot_reads_mapped)*100
+                    
+                    print ("Total ECs detected: ",str(len(EChash)) + " percent " + str(perc_EC_mapped))
+                    #first10pairs = {k: EChash[k] for k in list(EChash)[10:20]}
+                    #print("resultant dictionary EC read hash: \n", first10pairs)
+                    FuncRpkgDict = normalize_rpkg(EChash,genedict,genelendict,ge)
+                    SampleFuncRpkgdict[sampletag] = FuncRpkgDict
+                elif (GEdictflag == "N" and strat == "Y" and map2ECflag == "Y"):
+                    ge = len(filteredDict)
+                    ge = ge/1000000
+                    EChash = mapRS2EC(funchash,Seq2ECdict,genedict)
+                    
+                    EC_mapped = len(EChash)
+                    perc_EC_mapped = (EC_mapped/tot_reads_mapped)*100
+                    
+                    print ("Total ECs detected: ",str(len(EChash)) + " percent " + str(perc_EC_mapped))
 
-
-    #first10pairs = {k: SampleFuncRpkgdict[k] for k in list(SampleFuncRpkgdict)[1:3]}
-    #print("resultant dictionary : \n", first10pairs)
-
-    #pdDF = pd.Dataframe()
+                    ECtaxahash = stratified(EChash,filteredDict)
+                    FuncRpkgDict = normalize_rpkg(ECtaxahash,genedict,genelendict,ge)
+                    SampleFuncRpkgdict[sampletag] = FuncRpkgDict
+                #else:
+                    #print ("MicrobeCensus result not found; Will not normalize")
             
-
-    #if (unstrat == "Y"):
-    pdDF = pd.DataFrame.from_dict(SampleFuncRpkgdict, orient='index')
-    pdDFT = pdDF.T
     
-    pd.DataFrame.to_csv(pdDFT, path_or_buf='test.out', sep='\t', na_rep='', header=True, index=True, mode='w', line_terminator='\n', escapechar=None, decimal='.')
-    #elif (strat):
+    
+    pdDF = pd.DataFrame.from_dict(SampleFuncRpkgdict, orient='index')
+    pdDF.fillna(0, inplace = True)
+    pdDFT = pdDF.T
+    pd.DataFrame.to_csv(pdDFT, path_or_buf=outfile, sep='\t', na_rep='', header=True, index=True, mode='w', line_terminator='\n', escapechar=None, decimal='.')
         
-                
-                    
-                    
-                
 
+def mapRS2EC(FuncReadHash,rs2ecdict,read2rsdict):
+    
+    ec2readhash = defaultdict(list)
+    read2echash = {}
+    
+    for func, readarray in FuncReadHash.items():
+        for read in readarray:
+            rsidarray = read2rsdict[read]
+            #print ("RefSeq Ids: ", rsidarray)
+            ECarray = getECsforRSIds(rsidarray, rs2ecdict)
+            #print ("EC lis: ", ECarray)
+            if (ECarray):
+                #print ("EC lis: ", ECarray)
+                MFreqEC = rankECsforRead(ECarray)
+                read2echash[read]=MFreqEC
+    
+    for readid, ec in read2echash.items():
+        ec = "EC:" + str(ec)
+        ec2readhash[ec].append(readid)
+    
+    
+    return ec2readhash
+        
 
-#def unstratified():
+def getECsforRSIds(rsidsarr,rs2echash):
+    # get a list of ECs mapped to RefSeq IDs for a given read
+    fullECarray=[]
+    default = ""
+    for rsid in rsidsarr:
+        ecarray = rs2echash.get(rsid,default)
+        for ec in ecarray:
+            fullECarray.append(ec)
+    
+    return fullECarray
+    
+def rankECsforRead(ecarray):
+    # get the most frequent EC in the list for each read
+    
+    unique, counts = np.unique(ecarray, return_counts=True)
+    #print ("Unique + counts: ", unique, counts)
+    ecCounts = {k: v for k, v in zip(unique, counts)}
+    
+    sorted_ecCounts = sorted(ecCounts.items(), key = itemgetter(1),reverse = True)
+    
+    #print ("EC counts: ", sorted_ecCounts, type(sorted_ecCounts))
+    
+    mfreqECcountTup = sorted_ecCounts[0]
+    
+    mfreEC = mfreqECcountTup[0]
+    
+    return mfreEC
     
     
 def stratified(FuncReadHash,filtFuncTaxadict):
+    # Stratify the function hash, 
+    # i.e break down each function into taxonomic classes and
+    # return a new hash with function-taxa pair keys
     
     taxahash = defaultdict(list)
     for key, value in sorted(filtFuncTaxadict.items()):
@@ -176,12 +354,10 @@ def stratified(FuncReadHash,filtFuncTaxadict):
     for func,readarray in FuncReadHash.items():
         for read in readarray:
             taxon = taxahash[read]
-            functaxakey = str(func) + "|" + str(taxon)
+            functaxakey = str(func).rstrip('\n') + "|" + str(taxon).rstrip('\n')
             
             stratified_hash[functaxakey].append(read)
-            
-            
-    
+                           
     return stratified_hash
     
     
@@ -206,7 +382,6 @@ def normalize_rpkg(dict_reads_mapped_to_func,dict_genes_mapped_to_read,refseq_ge
                     lengthkb = FuncAvgGeneLength/1000
                     
                     if (GE and lengthkb):
-                        #lengthkb = FuncAvgGeneLength/1000
                         rpkg = numreads/lengthkb/GE
                     else:
                         rpkg = float('NaN')
@@ -233,7 +408,6 @@ def parseMicrobeCensusReport(MCRfile):
 
 def Average(lst):
     avg=0
-#    print ("In average .... yay!")
 
     if(len(lst) > 0):
         avg = float(sum(np.float_(lst)) / len(lst))
@@ -270,14 +444,17 @@ def coreRun(taxaf,taxaft,funcf,funcft,m8):
     if (funcft == 'megan'):
         print ("Functype:Megan\n")
         funcdict = parseMeganFuncfile(funcf)
-    elif (funcft == 'other'):
-        print ("Functype:Other\n")
-        funcdict = parseOtherFuncfile(funcf)
+    elif (funcft == 'uniref'):
+        print ("Functype:uniref\n")
+        funcdict = parseUnirefFuncfile(funcf)
+    elif (funcft == 'COG'):
+        print ("Functype:COG\n")
+        funcdict = parseUnirefFuncfile(funcf)
     else:
         print ("Func type not recognised\n")
     
     if (m8):
-        print ("m8 file given; will Normalize to get RPKG")
+        print ("m8 file given...processing")
         genedict = parseBlastm8(m8)
     
     return taxadict,funcdict,genedict
@@ -308,13 +485,23 @@ def parseBlastm8(filename):
             val = fields[1] 
             #d[str(key)] = str(val)
             d[key].append(val)
-    
+            
     #first10pairs = {k: d[k] for k in list(d)[10:20]}
     #print("resultant dictionary : \n", first10pairs) 
     return d
 
     
+def parseUnirefFuncfile(filename):
     
+    d = {}
+    print ("In Uniref Parsed func ... ")
+    with open(filename) as f:
+        for line in f:
+            #fields = line.split("\t")
+            (key, val) = line.split("\t")
+            d[str(key)] = str(val)
+    return d
+
 
 def parseMeganFuncfile(filename):
     d = {}

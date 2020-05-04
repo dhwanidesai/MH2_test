@@ -55,7 +55,7 @@ use Getopt::Long;
 use Data::Dumper;
 use Parallel::ForkManager;
 use Sys::CPU;
-
+use POSIX 'strftime';
 
 GetOptions (
 'o|out=s' => \$outpath,
@@ -98,26 +98,35 @@ my $cpu_count=1;
     }
 
 $base_cmd=$mapmethod;
+
+$current_date = strftime '%Y-%m-%d-%H-%M-%S', localtime;
+print "$current_date\n";
+
+#exit;
 # $dbIndex_cmd = $base_cmd." createindex $db tmp";
 
 
 
-print "Total Cpus usd:$cpu_count\nMapping method:$mapmethod";
+print "Total Cpus usd:$cpu_count\nMapping method:$mapmethod\n";
 
 #system("$dbIndex_cmd > /dev/null");
-#system("mmseqs createindex $db tmp");
+#if ($mapmethod == "mmseqs")
+#{
+#print "creating mmseqs DB index\n";
+#system("mmseqs createindex $db tmp > /dev/null");
+#}
 #system("mmseqs createindex /home/dhwani/databases/mmseqsRefSeqCompleteDB tmp");
 
-$pm = new Parallel::ForkManager($cpu_count);
+#$pm = new Parallel::ForkManager($cpu_count);
 
-$pm->run_on_finish( sub {
-    my ($pid, $exit_code, $ident, $exit_signal, $core_dump, $data_structure_reference) = @_;
+#$pm->run_on_finish( sub {
+#    my ($pid, $exit_code, $ident, $exit_signal, $core_dump, $data_structure_reference) = @_;
     
-    my $q = $data_structure_reference->{input};
+#    my $q = $data_structure_reference->{input};
     
-    print "Finished running process $pid for $q, $exit_code, $exit_signal\n";
+#    print "Finished running process $pid for $q, $exit_code, $exit_signal\n";
 #     $results{$q} = $data_structure_reference->{result};
-});
+#});
 
     foreach my $file (@files) 
     {
@@ -142,7 +151,7 @@ $pm->run_on_finish( sub {
     $rma_outfile=$base_cmd."-".$sample_tag."-top25-tax-interpro.rma";
     $megantax_out=$base_cmd."-".$sample_tag."-Megan_Taxonomy-assignments.txt";
     $meganfunc_out=$base_cmd."-".$sample_tag."-Megan_Interpro-assignments.txt";
-    $jobfile=$base_cmd."-".$sample_tag."-jobfile.sh";
+    $jobfile=$base_cmd."-".$sample_tag."-$current_date"."-jobfile.sh";
     $logfile=$base_cmd."-".$sample_tag."-logfile.txt";
 
     open (OUT, ">$jobfile");
@@ -150,8 +159,8 @@ $pm->run_on_finish( sub {
         if ($mapmethod eq "mmseqs")
         {
         print OUT "mmseqs createdb $file $outpath/$querydb\n";
-        print OUT "mmseqs search $outpath/$querydb $db $outpath/$result_db tmp --db-load-mode 3 --threads 2 --max-seqs 25 -s 1 -a -e 1e-5\n";
-        print OUT "mmseqs convertalis $outpath/$querydb $db $outpath/$result_db $outpath/$m8_outfile --db-load-mode 3\n";
+        print OUT "mmseqs search $outpath/$querydb $db $outpath/$result_db tmp --db-load-mode 2 --threads $cpu_count --max-seqs 25 -s 1 -a -e 1e-5 > /dev/null 2>&1\n";
+        print OUT "mmseqs convertalis $outpath/$querydb $db $outpath/$result_db $outpath/$m8_outfile --db-load-mode 2 > /dev/null 2>&1\n";
         }
         elsif ($mapmethod eq "diamond")
         {
@@ -186,17 +195,17 @@ $pm->run_on_finish( sub {
 
     system("chmod 755 $jobfile");
 
-    my $pid = $pm->start and next; # do the fork
+    #my $pid = $pm->start and next; # do the fork
 
-    system("sh $jobfile > /dev/null 2> $logfile");
+    #system("sh $jobfile > /dev/null 2> $logfile");
     
-    my @pids = $pm->running_procs;
+    #my @pids = $pm->running_procs;
 
 #     print "\n\n ----> $pid <---- @pids\n\n";
 
     
-    $pm->finish(0, { result => \@pids, input => $file });; # do the exit in the child process
+    #$pm->finish(0, { result => \@pids, input => $file });; # do the exit in the child process
     }
 
-$pm->wait_all_children;
+#$pm->wait_all_children;
 # print Dumper \%results;
