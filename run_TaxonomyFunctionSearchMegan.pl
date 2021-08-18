@@ -159,7 +159,7 @@ print "Total Cpus usd:$cpu_count\nMapping method:$mapmethod\n";
         if ($mapmethod eq "mmseqs")
         {
         print OUT "mmseqs createdb $file $outpath/$querydb\n";
-        print OUT "mmseqs search $outpath/$querydb $db $outpath/$result_db tmp --db-load-mode 2 --threads $cpu_count --max-seqs 25 -s 1 -a -e 1e-5 > /dev/null 2>&1\n";
+        print OUT "mmseqs search $outpath/$querydb $db $outpath/$result_db tmp --db-load-mode 3 --threads $cpu_count --max-seqs 25 -s 1 -a -e 1e-5 > /dev/null 2>&1\n";
         print OUT "mmseqs convertalis $outpath/$querydb $db $outpath/$result_db $outpath/$m8_outfile --db-load-mode 2 > /dev/null 2>&1\n";
         }
         elsif ($mapmethod eq "diamond")

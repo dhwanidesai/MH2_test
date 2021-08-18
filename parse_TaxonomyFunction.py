@@ -20,11 +20,11 @@ parser=argparse.ArgumentParser()
 parser.add_argument('--taxafile', help = 'File mapping the reads to Taxa')
 parser.add_argument('--taxafiletype', help = 'Source program for Taxa identification, either one of kraken2 or megan')
 parser.add_argument('--funcfile', help = 'File mapping reads to functional categories')
-parser.add_argument('--funcfiletype', help = 'Source program for Function identification, either one of uniref, megan or COG')
+parser.add_argument('--funcfiletype', help = 'Source program for Function identification, either one of uniref, refseq, megan or COG')
 parser.add_argument('--m8file', help = 'BLAST or BLAST-like tab delimited output file mapping reads to Refseq or uniref IDs; required for Normalization to RPKG')
 
 parser.add_argument('--multisample', help = textwrap.dedent('''For running multiple samples at a time, input a text file; overrides the above 5 arguments
-    Format of the text file should contain 5 columns
+    Format of the text file should contain 6 columns
     
     '''))
 
@@ -163,6 +163,11 @@ def main():
                     Seq2ECdict = COG2ECdict
                 elif (funcfiletype == 'COG' and map2ECflag == "N"):
                     genelendict = COGgenelendict
+                elif (funcfiletype == 'refseq' and map2ECflag == "Y"):
+                    genelendict = RSgenelendict
+                    Seq2ECdict = RS2ECdict
+                elif (funcfiletype == 'refseq' and map2ECflag == "N"):
+                    genelendict = RSgenelendict
                     
                 
                 print ("Current sample:", taxafile,taxafiletype,funcfile,funcfiletype,m8file)
@@ -285,7 +290,13 @@ def main():
     pdDF = pd.DataFrame.from_dict(SampleFuncRpkgdict, orient='index')
     pdDF.fillna(0, inplace = True)
     pdDFT = pdDF.T
-    pd.DataFrame.to_csv(pdDFT, path_or_buf=outfile, sep='\t', na_rep='', header=True, index=True, mode='w', line_terminator='\n', escapechar=None, decimal='.')
+    pdDFT.columns.name = 'function'
+    print (pdDFT.columns)
+    
+    #if (strat == "Y"):
+    #    pdDFT[['function','sequence']] = pdDFT['function'].str.split("|",expand=True)
+
+    pd.DataFrame.to_csv(pdDFT, path_or_buf=outfile, sep='\t', na_rep='', header=True, index=True, index_label='function', mode='w', line_terminator='\n', escapechar=None, decimal='.')
         
 
 def mapRS2EC(FuncReadHash,rs2ecdict,read2rsdict):
@@ -449,6 +460,9 @@ def coreRun(taxaf,taxaft,funcf,funcft,m8):
         funcdict = parseUnirefFuncfile(funcf)
     elif (funcft == 'COG'):
         print ("Functype:COG\n")
+        funcdict = parseUnirefFuncfile(funcf)
+    elif (funcft == 'refseq'):
+        print ("Functype:refseq\n")
         funcdict = parseUnirefFuncfile(funcf)
     else:
         print ("Func type not recognised\n")
